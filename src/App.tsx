@@ -48,25 +48,8 @@ const App: React.FC = () => {
     );
   }
 
-  // CameraView baru akan di-mount dan diload SETELAH tombol diklik
-  return <CameraView onError={setError} />;
-};
-
-export default App;        <button 
-          onClick={() => setStarted(true)}
-          className="px-10 py-4 bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 rounded-full hover:bg-cyan-500/30 active:scale-95 transition shadow-[0_0_15px_rgba(6,182,212,0.3)] font-bold tracking-widest"
-        >
-          START CAMERA
-        </button>
-        
-        <p className="absolute bottom-8 text-[10px] text-gray-600 max-w-xs text-center">
-          100% Client-side. Privacy secured.
-        </p>
-      </div>
-    );
-  }
-
-  return <CameraView onError={setError} />;
+  // PERBAIKAN: Type-safe function wrapping agar tidak bentrok dengan Dispatch tipe React
+  return <CameraView onError={(msg) => setError(msg)} />;
 };
 
 export default App;
