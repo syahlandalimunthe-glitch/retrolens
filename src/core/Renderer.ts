@@ -14,17 +14,16 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
 
   constructor(canvas: HTMLCanvasElement) {
-    const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    // PERBAIKAN: Dibuat sangat standar agar TS DOM lib tidak melempar error
+    const context = canvas.getContext('2d');
     if (!context) throw new Error("Canvas 2D not supported");
     this.ctx = context;
   }
 
   render(video: HTMLVideoElement, width: number, height: number, portalMask: Point[] | null, filterIndex: number, isMirrored: boolean) {
-    // 1. Reset Context
-    this.ctx.restore(); // Bersihkan clip sebelumnya jika ada
+    this.ctx.restore(); 
     this.ctx.save();
     
-    // 2. Clear & Draw Background Camera
     if (isMirrored) {
       this.ctx.translate(width, 0);
       this.ctx.scale(-1, 1);
@@ -32,40 +31,30 @@ export class Renderer {
     this.ctx.filter = 'none';
     this.ctx.drawImage(video, 0, 0, width, height);
     
-    // Kembalikan orientasi normal untuk menggambar portal
     if (isMirrored) {
       this.ctx.scale(-1, 1);
       this.ctx.translate(-width, 0);
     }
 
-    // 3. Draw Portal Filter (Hanya dieksekusi jika ada portal)
     if (portalMask && portalMask.length > 2) {
       this.ctx.save();
-      
-      // Buat Path Portal
       this.ctx.beginPath();
       this.ctx.moveTo(portalMask[0].x, portalMask[0].y);
       for (let i = 1; i < portalMask.length; i++) {
         this.ctx.lineTo(portalMask[i].x, portalMask[i].y);
       }
       this.ctx.closePath();
-
-      // Masking: Area gambar selanjutnya HANYA di dalam poligon ini
       this.ctx.clip();
 
-      // Balik orientasi lagi karena kita menggambar video
       if (isMirrored) {
         this.ctx.translate(width, 0);
         this.ctx.scale(-1, 1);
       }
       
-      // Aplikasikan Filter CSS dan Timpa Gambar
       this.ctx.filter = FILTERS[filterIndex].css;
       this.ctx.drawImage(video, 0, 0, width, height);
-      
-      this.ctx.restore(); // Hapus masking (clip)
+      this.ctx.restore(); 
 
-      // 4. Draw Portal Stroke/Glow (Di atas semuanya)
       this.ctx.save();
       this.ctx.beginPath();
       this.ctx.moveTo(portalMask[0].x, portalMask[0].y);
@@ -82,6 +71,6 @@ export class Renderer {
       this.ctx.restore();
     }
     
-    this.ctx.restore(); // Final restore untuk frame berikutnya
+    this.ctx.restore(); 
   }
 }
