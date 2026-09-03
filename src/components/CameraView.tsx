@@ -3,7 +3,7 @@ import { Camera, SwitchCamera, Loader2, Maximize } from 'lucide-react';
 import { HandTracker } from '../core/HandTracker';
 import { PortalEngine } from '../core/PortalEngine';
 import { Renderer, FILTERS } from '../core/Renderer';
-import { smoothLandmarks, Landmark } from '../core/MathUtils';
+import { smoothLandmarks, Landmark, Point } from '../core/MathUtils'; // PERBAIKAN: Point harus di-import
 
 interface CameraViewProps { onError: (msg: string) => void; }
 
@@ -48,7 +48,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onError }) => {
 
   useEffect(() => {
     facingModeRef.current = facingMode;
-    let animationFrameId: number;
+    let animationFrameId = 0; // PERBAIKAN: Diinisialisasi dengan 0 agar lolos strict-check
     let stream: MediaStream | null = null;
     let renderer: Renderer | null = null;
     let isRunning = true;
@@ -58,12 +58,10 @@ export const CameraView: React.FC<CameraViewProps> = ({ onError }) => {
       try {
         setIsLoaded(false);
         
-        // 1. Cek dukungan browser
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Your browser does not support camera access or is not running on HTTPS.");
+          throw new Error("Browser doesn't support camera or is not on HTTPS.");
         }
 
-        // 2. Minta izin kamera
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false
@@ -74,36 +72,38 @@ export const CameraView: React.FC<CameraViewProps> = ({ onError }) => {
         if (!video || !canvas || !isRunning) return;
 
         video.srcObject = stream;
-        await new Promise((resolve) => {
-          video.onloadedmetadata = () => { video.play(); resolve(true); };
+        
+        // PERBAIKAN: Menambahkan <void> dan menangkap promise error pada .play()
+        await new Promise<void>((resolve) => {
+          video.onloadedmetadata = () => { 
+            video.play().catch(() => {}); 
+            resolve(); 
+          };
         });
 
-        // 3. Load MediaPipe SETELAH kamera berhasil
         const handLandmarker = await HandTracker.getInstance();
-
         renderer = new Renderer(canvas);
         setIsLoaded(true);
 
         const renderLoop = (time: number) => {
           if (!isRunning) return;
           
-          // FIX: Cegah IndexSizeError di Mobile Browser saat video Width belum ter-resolve
           if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-            
-            // Sinkronisasi ukuran canvas dengan video mentah secara dinamis
             if (canvas.width !== video.videoWidth) {
               canvas.width = video.videoWidth;
               canvas.height = video.videoHeight;
             }
 
             const isMirrored = facingModeRef.current === 'user';
-            let portalResult = null;
             
-            // Throttle Tracking ~30FPS
+            // PERBAIKAN: Deklarasikan tipe union agar TS tidak error saat diisi Point[]
+            let portalResult: Point[] | null = null; 
+            
             if (time - lastTrackTime > 33) {
               const results = handLandmarker.detectForVideo(video, time);
               if (results.landmarks && results.landmarks.length > 0) {
-                smoothedLandmarks.current = smoothLandmarks(results.landmarks, smoothedLandmarks.current, 0.4);
+                // PERBAIKAN: Type assertion ke Landmark[][] agar TS tidak protes tentang properti berlebih
+                smoothedLandmarks.current = smoothLandmarks(results.landmarks as Landmark[][], smoothedLandmarks.current, 0.4);
                 
                 if (PortalEngine.detectPinch(smoothedLandmarks.current)) {
                   if (time - lastPinchTime.current > 1000) {
@@ -121,7 +121,9 @@ export const CameraView: React.FC<CameraViewProps> = ({ onError }) => {
               portalResult = PortalEngine.getPortalPolygon(smoothedLandmarks.current, canvas.width, canvas.height, isMirrored);
             }
 
-            renderer!.render(video, canvas.width, canvas.height, portalResult, filterRef.current, isMirrored);
+            if (renderer) { // PERBAIKAN: Null check
+              renderer.render(video, canvas.width, canvas.height, portalResult, filterRef.current, isMirrored);
+            }
           }
           animationFrameId = requestAnimationFrame(renderLoop);
         };
@@ -130,7 +132,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onError }) => {
 
       } catch (err: any) {
         if (err.name === 'NotAllowedError') {
-          onError("Camera permission denied. Please allow camera access in your browser settings.");
+          onError("Camera permission denied. Please allow camera access.");
         } else {
           onError(err.message || "Failed to initialize camera or AI model.");
         }
@@ -141,7 +143,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onError }) => {
 
     return () => {
       isRunning = false;
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (animationFrameId !== 0) cancelAnimationFrame(animationFrameId); // PERBAIKAN
       if (stream) stream.getTracks().forEach(track => track.stop());
     };
   }, [facingMode]);
@@ -187,76 +189,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onError }) => {
       )}
     </div>
   );
-};    a.download = `RetroLens_${Date.now()}.jpg`;
-    a.click();
-  };
-
-  const requestFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  };
-
-  useEffect(() => {
-    facingModeRef.current = facingMode;
-    let animationFrameId: number;
-    let stream: MediaStream | null = null;
-    let renderer: Renderer | null = null;
-    let isRunning = true;
-    let lastTrackTime = 0;
-
-    const start = async () => {
-      try {
-        setIsLoaded(false);
-        const handLandmarker = await HandTracker.getInstance();
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false
-        });
-
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (!video || !canvas || !isRunning) return;
-
-        video.srcObject = stream;
-        await new Promise((resolve) => {
-          video.onloadedmetadata = () => { video.play(); resolve(true); };
-        });
-
-        renderer = new Renderer(canvas);
-        
-        // Sesuaikan ukuran resolusi internal Canvas dengan aslinya
-        const syncCanvasSize = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-        };
-        syncCanvasSize();
-        setIsLoaded(true);
-
-        const renderLoop = (time: number) => {
-          if (!isRunning) return;
-          if (video.readyState >= 2 && canvas.width > 0) {
-            
-            const isMirrored = facingModeRef.current === 'user';
-            let portalResult = null;
-            
-            // Throttle Tracking ke ~30FPS, Rendering tetap ~60FPS
-            if (time - lastTrackTime > 33) {
-              const results = handLandmarker.detectForVideo(video, time);
-              if (results.landmarks && results.landmarks.length > 0) {
-                // Terapkan EMA Smoothing pada koordinat tangan
-                smoothedLandmarks.current = smoothLandmarks(results.landmarks, smoothedLandmarks.current, 0.4);
-                
-                // Pinch detection (dengan debounce 1 detik)
-                if (PortalEngine.detectPinch(smoothedLandmarks.current)) {
-                  if (time - lastPinchTime.current > 1000) {
-                    nextFilter();
-                    lastPinchTime.current = time;
-                  }
-                }
+};        }
               } else {
                 smoothedLandmarks.current = null; // Reset jika tidak ada tangan
               }
